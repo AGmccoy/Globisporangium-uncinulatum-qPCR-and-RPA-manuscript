@@ -1,0 +1,227 @@
+---
+title: "Py. uncinulatum qPCR figures"
+author: "Austin McCoy"
+date: "9/21/2022"
+output: 
+  html_document:
+    keep_md: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(readxl)
+library(ggpubr)
+library(openxlsx)
+library(dplyr)
+library(ggpmisc)
+library(cowplot)
+
+```
+
+```{r}
+old_std_curve <- read_excel("L:/![AWARDED]GREEEN Pythium qPCR grant proposal/Py. uncinulatum specific assay/Probe optimization tests/primer-probe combination and concentration moving forward LOD baseline corrected.xlsx", 
+    sheet = "Sheet2")
+
+
+```
+
+```{r, dpi=600}
+regression_plot <- ggplot(old_std_curve, aes(x=log_dna,y=ct)) +
+  geom_point() +
+  stat_regline_equation(aes(label=paste(..eq.label.., ..adj.rr.label.., sep = "~~~~")),label.x=-1, label.y=35) +
+  geom_smooth(method=lm, se=FALSE) +
+  theme(axis.text.y = element_text(size = 10, face = "bold", family = "serif"),
+                     axis.title.x = element_text(size = 15, face = "bold", family = "serif"),
+                     axis.title.y = element_text(size = 15, face = "bold", family = "serif"),
+                     axis.line.x = element_line(colour = 'gray', size=0.5, linetype='solid'),
+                     axis.line.y = element_line(colour = 'gray', size=0.5, linetype='solid'),
+                     legend.text = element_text(size = 10, face = "bold", family = "serif"),
+                     legend.key = element_blank(),
+                     legend.title = element_text(size = 10, face="bold", family = "serif"),
+                     legend.position = "right",
+                     strip.text.x = element_text(size = 15, face = "bold", family = "serif"),
+                     title = element_text(size = 16, family = "serif")) +
+                      ggtitle("Pythium uncinulatum qPCR regression plot") +
+                  ylim(0,40) +
+                  labs(x="log DNA concentration",y="Cycyle Threshold (Cq)", col="Time Point")
+
+regression_plot
+```
+
+single plex, multiplex, with and without control (100ng lettuce, 5fg HHIC) LOD for efficiency
+loading in the data
+```{r}
+new_std_curves <- read_excel("HHIC PIC LOD comparison.xlsx")
+
+```
+
+removing 0ng/ul control, checking that these were completely negative of the pythium uncinulatum DNA, and had amplification of the PIC or HHIC DNA added. These were added to the master mix and were therefore within the negative control samples, even in the absence of Py. uncinulatum.
+```{r}
+new_std_cruves_noneg <- new_std_curves %>%
+          subset(., total_ng_input != "0") %>% # removing 0ng/ul negative controls for plotting
+          subset(., fluor != "Cal Red 610") %>% # removing our internal controls and their cq values for plotting
+          subset(., total_ng_input != "1e-07") %>% # removing as there was no consistent amplification across tests here
+          subset(., total_ng_input != "1e-06") %>% # removing as, again, there was no consistent amplification here
+          subset(., content != "soilrun_single_plex_noIC")
+
+  # my LOD across single plex, plant assay, and soil assay was consistently 1e-05, or 0.00001 ng total input DNA
+
+negatives_only <- new_std_curves %>%
+          subset(., total_ng_input == "0") # everything is as expected. HHIC ~30cq, PIC ~15cq with 100ng lettuce DNA added. no pyunc amplification
+
+multiplex_dna_only <- new_std_cruves_noneg %>%
+  subset(., content != "PIC no plant DNA") %>%
+  subset(., content != "soil assay without HHIC DNA")
+
+#write.xlsx(multiplex_dna_only, "Multiplex data for efficiency and r squared.xlsx")
+
+mulipled_dna_only_meanct <- multiplex_dna_only %>%
+  group_by(content, log_dna_fg) %>%
+  summarise(mean_cq=mean(cq))
+
+#write.xlsx(mulipled_dna_only_meanct, "mean multiplex data for efficiency and r squared.xlsx")
+
+```
+
+Looking at internal controls
+```{r}
+
+
+```
+
+regression plots for each test, all together in one
+```{r}
+regression_plot_alltogether <- ggplot(multiplex_dna_only, aes(x=log_dna_fg,y=cq, color = content)) +
+  geom_point() +
+  stat_poly_eq(formula = y~x, aes(label=paste(..eq.label.., ..rr.label.., sep = "~~~~")), geom= "label", coef.digits = 5, f.digits = 5, rr.digits = 4, label.x=c(3.3, 3.3, 3.3), label.y=c(1, 8, 14), size = 4) +
+  geom_smooth(method=lm, se=FALSE) +
+  theme(axis.text.y = element_text(size = 15, face = "bold", family = "serif"),
+        axis.text.x = element_text(size = 15, face = "bold", family = "serif"),
+                     axis.title.x = element_text(size = 15, face = "bold", family = "serif"),
+                     axis.title.y = element_text(size = 15, face = "bold", family = "serif"),
+                     axis.line.x = element_line(colour = 'gray', size=0.5, linetype='solid'),
+                     axis.line.y = element_line(colour = 'gray', size=0.5, linetype='solid'),
+                     legend.text = element_text(size = 15, face = "bold", family = "serif"),
+                     legend.key = element_blank(),
+                     legend.title = element_text(size = 15, face="bold", family = "serif"),
+                     legend.position = "right",
+                     strip.text.x = element_text(size = 15, face = "bold", family = "serif"),
+                     title = element_text(size = 16, family = "serif")) +
+                     # ggtitle("Pythium uncinulatum qPCR regression plot (single plex, plant assay, soil assay)") +
+                  ylim(0,40) +
+                  scale_x_continuous(breaks=seq(0, 8, 1)) +
+                  labs(x="log10 Genomic DNA concentration (fg)",y="Mean cycyle threshold (Cq)", col="Assay")
+
+regression_plot_alltogether
+
+ggsave("Figure 1. pythium uncinulatum single plex vs multiplex regression plots.png", regression_plot_alltogether, dpi = 600, width = 12, height = 4, units = c("in"))
+
+```
+
+
+Multilab validation Limit of Detection (LOD)
+```{r}
+# Plant assay first
+multilab_lod <- read_excel("multilab validation LOD.xlsx", 
+    sheet = "Sheet2")
+
+multilab_lod_plant <- multilab_lod %>%
+  subset(., qpcr_assay =="Plant")
+
+
+multilab_regression_plant_lod <- ggplot(multilab_lod_plant, aes(x=log_concentration_fg,y=mean_ct, color = lab_anon)) +
+  geom_point() +
+  stat_poly_eq(formula = y~x, aes(label=paste(..eq.label.., ..rr.label.., sep = "~~~~")), geom= "label", coef.digits = 5, f.digits = 5, rr.digits = 4, label.x=c(2.5, 2.5, 2.5, 2.5, 2.5), label.y=c(21, 16, 11, 6, 1), size = 4) +
+  geom_smooth(method=lm, se=FALSE) +
+  theme(axis.text.y = element_text(size = 15, face = "bold", family = "serif"),
+        axis.text.x = element_text(size = 15, face = "bold", family = "serif"),
+                     axis.title.x = element_text(size = 15, face = "bold", family = "serif"),
+                     axis.title.y = element_text(size = 15, face = "bold", family = "serif"),
+                     axis.line.x = element_line(colour = 'gray', size=0.5, linetype='solid'),
+                     axis.line.y = element_line(colour = 'gray', size=0.5, linetype='solid'),
+                     legend.text = element_text(size = 15, face = "bold", family = "serif"),
+                     legend.key = element_blank(),
+                     legend.title = element_text(size = 15, face="bold", family = "serif"),
+                     legend.position = "right",
+                     strip.text.x = element_text(size = 15, face = "bold", family = "serif"),
+                     title = element_text(size = 16, family = "serif")) +
+                      ggtitle("A) Plant assay") +
+                  ylim(0,40) +
+                  scale_x_continuous(breaks=seq(1, 6, 1)) +
+                  labs(x="log10 Genomic DNA concentration (fg)",y="Cycyle threshold (Cq)", col="Lab")
+
+multilab_regression_plant_lod
+
+# Soil assay second
+
+multilab_lod_soil <- multilab_lod %>%
+  subset(., qpcr_assay =="Soil")
+
+multilab_regression_soil_lod <- ggplot(multilab_lod_soil, aes(x=log_concentration_fg,y=mean_ct, color = lab_anon)) +
+  geom_point() +
+  stat_poly_eq(formula = mean(y)~x, aes(label=paste(..eq.label.., ..rr.label.., sep = "~~~~")), parse=TRUE, geom= "label", coef.digits = 5, f.digits = 5, rr.digits = 4, label.x=c(2.5, 2.5, 2.5, 2.5, 2.5), label.y=c(21, 16, 11, 6, 1), size = 4) +
+  geom_smooth(method=lm, se=FALSE) +
+  theme(axis.text.y = element_text(size = 15, face = "bold", family = "serif"),
+        axis.text.x = element_text(size = 15, face = "bold", family = "serif"),
+                     axis.title.x = element_text(size = 15, face = "bold", family = "serif"),
+                     axis.title.y = element_text(size = 15, face = "bold", family = "serif"),
+                     axis.line.x = element_line(colour = 'gray', size=0.5, linetype='solid'),
+                     axis.line.y = element_line(colour = 'gray', size=0.5, linetype='solid'),
+                     legend.text = element_text(size = 15, face = "bold", family = "serif"),
+                     legend.key = element_blank(),
+                     legend.title = element_text(size = 15, face="bold", family = "serif"),
+                     legend.position = "right",
+                     strip.text.x = element_text(size = 15, face = "bold", family = "serif"),
+                     title = element_text(size = 16, family = "serif")) +
+                      ggtitle("B) Soil assay") +
+                  ylim(0,40) +
+                  scale_x_continuous(breaks=seq(1, 6, 1)) +
+                  labs(x="log10 Genomic DNA concentration (fg)",y="Mean cycyle threshold (Cq)", col="Lab")
+
+multilab_regression_soil_lod
+
+# now we will put them together for our Figure 1
+
+multilab_plantandsoil <- plot_grid(multilab_regression_plant_lod, multilab_regression_soil_lod, nrow=2)
+
+multilab_plantandsoil
+
+ggsave("Figure 2. multilab plant and soil qpcr assay regression plots.png", plot=multilab_plantandsoil, width = 8, height = 10, units = "in")
+
+```
+
+RPA sensitivity Figure
+```{r}
+RPA_sensitivity <- read_excel("RPA sensitivity data for R - from table on onedrive.xlsx")
+
+RPA_regression_lod <- ggplot(RPA_sensitivity, aes(x=log_fg,y=mean_OA_min, color = crudeextract_or_pureDNA)) +
+  geom_point() +
+  stat_poly_eq(formula = y~x, aes(label=paste(..eq.label.., ..rr.label.., sep = "~~~~")), geom= "label", coef.digits = 5, f.digits = 5, rr.digits = 4, label.x=c(4.5, 4.5), label.y=c(30, 25), size = 4) +
+  geom_smooth(method=lm, se=FALSE) +
+  theme(axis.text.y = element_text(size = 15, face = "bold", family = "serif"),
+        axis.text.x = element_text(size = 15, face = "bold", family = "serif"),
+                     axis.title.x = element_text(size = 15, face = "bold", family = "serif"),
+                     axis.title.y = element_text(size = 15, face = "bold", family = "serif"),
+                     axis.line.x = element_line(colour = 'gray', size=0.5, linetype='solid'),
+                     axis.line.y = element_line(colour = 'gray', size=0.5, linetype='solid'),
+                     legend.text = element_text(size = 15, face = "bold", family = "serif"),
+                     legend.key = element_blank(),
+                     legend.title = element_text(size = 15, face="bold", family = "serif"),
+                     legend.position = "right",
+                     strip.text.x = element_text(size = 15, face = "bold", family = "serif"),
+                     title = element_text(size = 16, family = "serif")) +
+                      #ggtitle("") +
+                  ylim(0,35) +
+                  scale_x_continuous(breaks=seq(1, 5, 1)) +
+                  labs(x="log10 Genomic DNA concentration (fg)",y="Mean onset of amplification (minutes)", col="Sample Type")
+
+RPA_regression_lod
+
+ggsave("Figure 3. RPA assay regression plots with and without crude plant extract.png", plot=RPA_regression_lod, width = 10, height = 6, units = "in")
+
+```
+
